@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
+
 import Modal from "./modal/Modal";
 import { UrlInput } from "./modal/UrlInput";
 import AudioPlayer from "./AudioPlayer";
@@ -137,6 +138,7 @@ export function AudioManager(props: { transcriber: Transcriber }) {
               url: string;
               source: AudioSource;
               mimeType: string;
+              fileName?: string;
           }
         | undefined
     >(undefined);
@@ -253,13 +255,19 @@ export function AudioManager(props: { transcriber: Transcriber }) {
                     <FileTile
                         icon={<FolderIcon />}
                         text={"From file"}
-                        onFileUpdate={(decoded, blobUrl, mimeType) => {
+                        onFileUpdate={(
+                            decoded,
+                            blobUrl,
+                            mimeType,
+                            fileName,
+                        ) => {
                             props.transcriber.onInputChange();
                             setAudioData({
                                 buffer: decoded,
                                 url: blobUrl,
                                 source: AudioSource.FILE,
                                 mimeType: mimeType,
+                                fileName: fileName,
                             });
                         }}
                     />
@@ -288,6 +296,7 @@ export function AudioManager(props: { transcriber: Transcriber }) {
                     <AudioPlayer
                         audioUrl={audioData.url}
                         mimeType={audioData.mimeType}
+                        fileName={audioData.fileName}
                     />
 
                     <div className='relative w-full flex justify-center items-center'>
@@ -369,14 +378,14 @@ function SettingsModal(props: {
 
     const models = {
         // Original checkpoints
-        'Xenova/whisper-tiny': [41, 152],
-        'Xenova/whisper-base': [77, 291],
-        'Xenova/whisper-small': [249],
-        'Xenova/whisper-medium': [776],
+        "Xenova/whisper-tiny": [41, 152],
+        "Xenova/whisper-base": [77, 291],
+        "Xenova/whisper-small": [249],
+        "Xenova/whisper-medium": [776],
 
         // Distil Whisper (English-only)
-        'distil-whisper/distil-medium.en': [402],
-        'distil-whisper/distil-large-v2': [767],
+        "distil-whisper/distil-medium.en": [402],
+        "distil-whisper/distil-large-v2": [767],
     };
     return (
         <Modal
@@ -400,13 +409,16 @@ function SettingsModal(props: {
                                     models[key].length == 2,
                             )
                             .filter(
-                                (key) => (
-                                    !props.transcriber.multilingual || !key.startsWith('distil-whisper/')
-                                )
+                                (key) =>
+                                    !props.transcriber.multilingual ||
+                                    !key.startsWith("distil-whisper/"),
                             )
                             .map((key) => (
                                 <option key={key} value={key}>{`${key}${
-                                    (props.transcriber.multilingual || key.startsWith('distil-whisper/')) ? "" : ".en"
+                                    props.transcriber.multilingual ||
+                                    key.startsWith("distil-whisper/")
+                                        ? ""
+                                        : ".en"
                                 } (${
                                     // @ts-ignore
                                     models[key][
@@ -576,6 +588,7 @@ function FileTile(props: {
         decoded: AudioBuffer,
         blobUrl: string,
         mimeType: string,
+        fileName: string,
     ) => void;
 }) {
     // const audioPlayer = useRef<HTMLAudioElement>(null);
@@ -591,6 +604,7 @@ function FileTile(props: {
         // Create a blob that we can use as an src for our audio element
         const urlObj = URL.createObjectURL(files[0]);
         const mimeType = files[0].type;
+        const fileName = files[0].name;
 
         const reader = new FileReader();
         reader.addEventListener("load", async (e) => {
@@ -603,7 +617,7 @@ function FileTile(props: {
 
             const decoded = await audioCTX.decodeAudioData(arrayBuffer);
 
-            props.onFileUpdate(decoded, urlObj, mimeType);
+            props.onFileUpdate(decoded, urlObj, mimeType, fileName);
         });
         reader.readAsArrayBuffer(files[0]);
 

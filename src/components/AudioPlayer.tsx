@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 export default function AudioPlayer(props: {
     audioUrl: string;
     mimeType: string;
+    fileName?: string;
 }) {
     const audioPlayer = useRef<HTMLAudioElement>(null);
     const audioSource = useRef<HTMLSourceElement>(null);
@@ -16,7 +17,12 @@ export default function AudioPlayer(props: {
     }, [props.audioUrl]);
 
     return (
-        <div className='flex relative z-10 p-4 w-full'>
+        <div className='flex flex-col gap-2 relative z-10 p-4 w-full'>
+            {props.fileName && (
+                <div className='text-sm text-slate-600 font-medium truncate px-2'>
+                    {props.fileName}
+                </div>
+            )}
             <audio
                 ref={audioPlayer}
                 controls
