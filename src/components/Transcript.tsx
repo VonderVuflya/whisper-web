@@ -18,16 +18,26 @@ export default function Transcript({ transcribedData }: Props) {
         link.click();
         URL.revokeObjectURL(url);
     };
-    const exportTXT = () => {
+    const getFullText = () => {
         let chunks = transcribedData?.chunks ?? [];
         let text = chunks
             .map((chunk) => chunk.text)
             .join("")
             .trim();
+        return text;
+    };
+    const exportTXT = () => {
+        const text = getFullText();
 
         const blob = new Blob([text], { type: "text/plain" });
         saveBlob(blob, "transcript.txt");
     };
+    const copyFullText = () => {
+        const text = getFullText();
+
+        navigator.clipboard.writeText(text);
+    };
+
     const exportJSON = () => {
         let jsonData = JSON.stringify(transcribedData?.chunks ?? [], null, 2);
 
@@ -74,6 +84,12 @@ export default function Transcript({ transcribedData }: Props) {
                 ))}
             {transcribedData && !transcribedData.isBusy && (
                 <div className='w-full text-right'>
+                    <button
+                        onClick={copyFullText}
+                        className='text-white bg-green-500 hover:bg-green-600 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-4 py-2 text-center mr-2 dark:bg-green-600 dark:hover:bg-green-700 dark:focus:ring-green-800 inline-flex items-center'
+                    >
+                        Copy full text
+                    </button>
                     <button
                         onClick={exportTXT}
                         className='text-white bg-green-500 hover:bg-green-600 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-4 py-2 text-center mr-2 dark:bg-green-600 dark:hover:bg-green-700 dark:focus:ring-green-800 inline-flex items-center'
