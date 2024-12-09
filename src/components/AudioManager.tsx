@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 
-import Modal from "./modal/Modal";
 import { UrlInput } from "./modal/UrlInput";
 import AudioPlayer from "./AudioPlayer";
 import { TranscribeButton } from "./TranscribeButton";
@@ -9,6 +8,15 @@ import Constants from "../utils/Constants";
 import { Transcriber } from "../hooks/useTranscriber";
 import Progress from "./Progress";
 import AudioRecorder from "./AudioRecorder";
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "./ui/dialog";
 
 function titleCase(str: string) {
     str = str.toLowerCase();
@@ -241,7 +249,7 @@ export function AudioManager(props: { transcriber: Transcriber }) {
 
     return (
         <>
-            <div className='flex flex-col justify-center items-center rounded-lg bg-white shadow-xl shadow-black/5 ring-1 ring-slate-700/10'>
+            <div className='flex flex-col justify-center items-center rounded-lg bg-background shadow-xl shadow-black/5 ring-1 ring-slate-700/10 dark:bg-slate-800 dark:ring-slate-600/10 dark:shadow-slate-900/5'>
                 <div className='flex flex-row space-x-2 py-2 w-full px-2'>
                     <UrlTile
                         icon={<AnchorIcon />}
@@ -309,11 +317,7 @@ export function AudioManager(props: { transcriber: Transcriber }) {
                             isTranscribing={props.transcriber.isBusy}
                         />
 
-                        <SettingsTile
-                            className='absolute right-4'
-                            transcriber={props.transcriber}
-                            icon={<SettingsIcon />}
-                        />
+                        <SettingsTile transcriber={props.transcriber} />
                     </div>
                     {props.transcriber.progressItems.length > 0 && (
                         <div className='relative z-10 p-4 w-full'>
@@ -336,44 +340,7 @@ export function AudioManager(props: { transcriber: Transcriber }) {
     );
 }
 
-function SettingsTile(props: {
-    icon: JSX.Element;
-    className?: string;
-    transcriber: Transcriber;
-}) {
-    const [showModal, setShowModal] = useState(false);
-
-    const onClick = () => {
-        setShowModal(true);
-    };
-
-    const onClose = () => {
-        setShowModal(false);
-    };
-
-    const onSubmit = (url: string) => {
-        onClose();
-    };
-
-    return (
-        <div className={props.className}>
-            <Tile icon={props.icon} onClick={onClick} />
-            <SettingsModal
-                show={showModal}
-                onSubmit={onSubmit}
-                onClose={onClose}
-                transcriber={props.transcriber}
-            />
-        </div>
-    );
-}
-
-function SettingsModal(props: {
-    show: boolean;
-    onSubmit: (url: string) => void;
-    onClose: () => void;
-    transcriber: Transcriber;
-}) {
+function SettingsTile(props: { className?: string; transcriber: Transcriber }) {
     const names = Object.values(LANGUAGES).map(titleCase);
 
     const models = {
@@ -387,15 +354,21 @@ function SettingsModal(props: {
         "distil-whisper/distil-medium.en": [402],
         "distil-whisper/distil-large-v2": [767],
     };
+
     return (
-        <Modal
-            show={props.show}
-            title={"Settings"}
-            content={
-                <>
+        <div className='absolute right-4'>
+            <Dialog>
+                <DialogTrigger>
+                    <Tile icon={<SettingsIcon />} />
+                </DialogTrigger>
+
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Settings</DialogTitle>
+                    </DialogHeader>
                     <label>Select the model to use.</label>
                     <select
-                        className='mt-1 mb-1 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500'
+                        className='mt-1 mb-1 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg  focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500'
                         defaultValue={props.transcriber.model}
                         onChange={(e) => {
                             props.transcriber.setModel(e.target.value);
@@ -459,6 +432,7 @@ function SettingsModal(props: {
                             </label>
                         </div>
                     </div>
+
                     {props.transcriber.multilingual && (
                         <>
                             <label>Select the source language.</label>
@@ -494,11 +468,9 @@ function SettingsModal(props: {
                             </select>
                         </>
                     )}
-                </>
-            }
-            onClose={props.onClose}
-            onSubmit={() => {}}
-        />
+                </DialogContent>
+            </Dialog>
+        </div>
     );
 }
 
@@ -526,34 +498,6 @@ function UrlTile(props: {
     text: string;
     onUrlUpdate: (url: string) => void;
 }) {
-    const [showModal, setShowModal] = useState(false);
-
-    const onClick = () => {
-        setShowModal(true);
-    };
-
-    const onClose = () => {
-        setShowModal(false);
-    };
-
-    const onSubmit = (url: string) => {
-        props.onUrlUpdate(url);
-        onClose();
-    };
-
-    return (
-        <>
-            <Tile icon={props.icon} text={props.text} onClick={onClick} />
-            <UrlModal show={showModal} onSubmit={onSubmit} onClose={onClose} />
-        </>
-    );
-}
-
-function UrlModal(props: {
-    show: boolean;
-    onSubmit: (url: string) => void;
-    onClose: () => void;
-}) {
     const [url, setUrl] = useState(Constants.DEFAULT_AUDIO_URL);
 
     const onChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -561,23 +505,36 @@ function UrlModal(props: {
     };
 
     const onSubmit = () => {
-        props.onSubmit(url);
+        props.onUrlUpdate(url);
     };
 
     return (
-        <Modal
-            show={props.show}
-            title={"From URL"}
-            content={
-                <>
-                    {"Enter the URL of the audio file you want to load."}
-                    <UrlInput onChange={onChange} value={url} />
-                </>
-            }
-            onClose={props.onClose}
-            submitText={"Load"}
-            onSubmit={onSubmit}
-        />
+        <Dialog>
+            <DialogTrigger>
+                <Tile icon={props.icon} text={props.text} />
+            </DialogTrigger>
+
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>From URL</DialogTitle>
+                </DialogHeader>
+
+                {"Enter the URL of the audio file you want to load."}
+                <UrlInput onChange={onChange} value={url} />
+
+                <DialogFooter>
+                    <DialogClose asChild>
+                        <button
+                            type='button'
+                            className={`inline-flex ml-4 justify-center rounded-md border border-transparent "bg-indigo-600" px-4 py-2 text-sm font-medium text-indigo-100 hover:bg-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 transition-all duration-300`}
+                            onClick={onSubmit}
+                        >
+                            Load
+                        </button>
+                    </DialogClose>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 }
 
@@ -641,71 +598,54 @@ function RecordTile(props: {
     text: string;
     setAudioData: (data: Blob) => void;
 }) {
-    const [showModal, setShowModal] = useState(false);
+    const [audioBlob, setAudioBlob] = useState<Blob>();
 
-    const onClick = () => {
-        setShowModal(true);
-    };
-
-    const onClose = () => {
-        setShowModal(false);
-    };
-
-    const onSubmit = (data: Blob | undefined) => {
-        if (data) {
-            props.setAudioData(data);
-            onClose();
+    const onSubmit = () => {
+        if (audioBlob) {
+            props.setAudioData(audioBlob);
         }
     };
-
-    return (
-        <>
-            <Tile icon={props.icon} text={props.text} onClick={onClick} />
-            <RecordModal
-                show={showModal}
-                onSubmit={onSubmit}
-                onClose={onClose}
-            />
-        </>
-    );
-}
-
-function RecordModal(props: {
-    show: boolean;
-    onSubmit: (data: Blob | undefined) => void;
-    onClose: () => void;
-}) {
-    const [audioBlob, setAudioBlob] = useState<Blob>();
 
     const onRecordingComplete = (blob: Blob) => {
         setAudioBlob(blob);
     };
 
-    const onSubmit = () => {
-        props.onSubmit(audioBlob);
-        setAudioBlob(undefined);
-    };
-
-    const onClose = () => {
-        props.onClose();
-        setAudioBlob(undefined);
-    };
-
     return (
-        <Modal
-            show={props.show}
-            title={"From Recording"}
-            content={
-                <>
-                    {"Record audio using your microphone"}
-                    <AudioRecorder onRecordingComplete={onRecordingComplete} />
-                </>
-            }
-            onClose={onClose}
-            submitText={"Load"}
-            submitEnabled={audioBlob !== undefined}
-            onSubmit={onSubmit}
-        />
+        <Dialog>
+            <DialogTrigger>
+                <Tile icon={props.icon} text={props.text} />
+            </DialogTrigger>
+
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>From Recording</DialogTitle>
+                </DialogHeader>
+
+                {"Record audio using your microphone"}
+                <AudioRecorder onRecordingComplete={onRecordingComplete} />
+
+                <DialogFooter>
+                    <DialogClose>
+                        <button
+                            type='button'
+                            disabled={!audioBlob !== undefined}
+                            className={`inline-flex ml-4 justify-center rounded-md border border-transparent ${
+                                audioBlob !== undefined
+                                    ? "bg-indigo-600"
+                                    : "bg-grey-300"
+                            } px-4 py-2 text-sm font-medium text-indigo-100 ${
+                                audioBlob !== undefined
+                                    ? "hover:bg-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                                    : ""
+                            } transition-all duration-300`}
+                            onClick={onSubmit}
+                        >
+                            Load
+                        </button>
+                    </DialogClose>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 }
 
@@ -717,7 +657,7 @@ function Tile(props: {
     return (
         <button
             onClick={props.onClick}
-            className='flex items-center justify-center rounded-lg p-2 bg-blue text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all duration-200'
+            className='flex items-center justify-center rounded-lg p-2 transition-all duration-200 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 bg-blue dark:bg-transparent dark:text-muted-foreground dark:hover:text-primary dark:hover:bg-slate-700'
         >
             <div className='w-7 h-7'>{props.icon}</div>
             {props.text && (
