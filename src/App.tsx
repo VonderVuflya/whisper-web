@@ -1,6 +1,7 @@
 import { ThemeProvider } from "./components/theme-provider";
 import { ModeToggle } from "./components/mode-toggle";
 import { AudioManager } from "./components/AudioManager";
+import { Toaster } from "./components/ui/sonner";
 import Transcript from "./components/Transcript";
 import { useTranscriber } from "./hooks/useTranscriber";
 
@@ -21,19 +22,13 @@ function App() {
                         ML-powered speech recognition directly in your browser
                     </h2>
                     <AudioManager transcriber={transcriber} />
-                    <Transcript transcribedData={transcriber.output} />
-                </div>
-
-                <div className='absolute bottom-4'>
-                    Made with{" "}
-                    <a
-                        className='underline'
-                        href='https://github.com/xenova/transformers.js'
-                    >
-                        🤗 Transformers.js
-                    </a>
+                    <Transcript
+                        transcribedData={transcriber.output}
+                        isBusy={transcriber.isBusy}
+                    />
                 </div>
             </div>
+            <Toaster />
         </ThemeProvider>
     );
 }

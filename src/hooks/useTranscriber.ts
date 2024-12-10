@@ -17,6 +17,7 @@ interface TranscriberUpdateData {
         { chunks: { text: string; timestamp: [number, number | null] }[] },
     ];
     text: string;
+    fileName: string;
 }
 
 interface TranscriberCompleteData {
@@ -24,21 +25,24 @@ interface TranscriberCompleteData {
         text: string;
         chunks: { text: string; timestamp: [number, number | null] }[];
     };
+    fileName: string;
 }
 
-export interface TranscriberData {
+export type FileName = string;
+export type TranscribeData = {
     isBusy: boolean;
     text: string;
     chunks: { text: string; timestamp: [number, number | null] }[];
-}
+};
+export type TranscriberData = Record<FileName, TranscribeData>;
 
 export interface Transcriber {
     onInputChange: () => void;
     isBusy: boolean;
     isModelLoading: boolean;
     progressItems: ProgressItem[];
-    start: (audioData: AudioBuffer | undefined) => void;
-    output?: TranscriberData;
+    start: (audioData: AudioData | undefined) => void;
+    output: TranscriberData;
     model: string;
     setModel: (model: string) => void;
     multilingual: boolean;
@@ -51,10 +55,22 @@ export interface Transcriber {
     setLanguage: (language: string) => void;
 }
 
+export enum AudioSource {
+    URL = "URL",
+    FILE = "FILE",
+    RECORDING = "RECORDING",
+}
+
+export type AudioData = {
+    buffer: AudioBuffer;
+    url: string;
+    source: AudioSource;
+    mimeType: string;
+    fileName: string;
+}[];
+
 export function useTranscriber(): Transcriber {
-    const [transcript, setTranscript] = useState<TranscriberData | undefined>(
-        undefined,
-    );
+    const [transcript, setTranscript] = useState<TranscriberData>({});
     const [isBusy, setIsBusy] = useState(false);
     const [isModelLoading, setIsModelLoading] = useState(false);
 
@@ -77,25 +93,32 @@ export function useTranscriber(): Transcriber {
                 break;
             case "update":
                 // Received partial update
-                // console.log("update", message);
                 // eslint-disable-next-line no-case-declarations
                 const updateMessage = message as TranscriberUpdateData;
-                setTranscript({
-                    isBusy: true,
-                    text: updateMessage.data[0],
-                    chunks: updateMessage.data[1].chunks,
-                });
+
+                setTranscript((prevState) => ({
+                    ...prevState,
+                    [updateMessage.fileName]: {
+                        isBusy: true,
+                        text: updateMessage.data[0],
+                        chunks: updateMessage.data[1].chunks,
+                    },
+                }));
                 break;
             case "complete":
                 // Received complete transcript
                 // console.log("complete", message);
                 // eslint-disable-next-line no-case-declarations
                 const completeMessage = message as TranscriberCompleteData;
-                setTranscript({
-                    isBusy: false,
-                    text: completeMessage.data.text,
-                    chunks: completeMessage.data.chunks,
-                });
+
+                setTranscript((prevState) => ({
+                    ...prevState,
+                    [completeMessage.fileName]: {
+                        isBusy: false,
+                        text: completeMessage.data.text,
+                        chunks: completeMessage.data.chunks,
+                    },
+                }));
                 setIsBusy(false);
                 break;
 
@@ -139,39 +162,45 @@ export function useTranscriber(): Transcriber {
     );
 
     const onInputChange = useCallback(() => {
-        setTranscript(undefined);
+        setTranscript({});
     }, []);
 
     const postRequest = useCallback(
-        async (audioData: AudioBuffer | undefined) => {
+        async (audioData: AudioData | undefined) => {
             if (audioData) {
-                setTranscript(undefined);
+                setTranscript({});
                 setIsBusy(true);
 
-                let audio;
-                if (audioData.numberOfChannels === 2) {
-                    const SCALING_FACTOR = Math.sqrt(2);
+                audioData.forEach(async (data) => {
+                    let audio;
+                    if (data.buffer.numberOfChannels === 2) {
+                        const SCALING_FACTOR = Math.sqrt(2);
 
-                    let left = audioData.getChannelData(0);
-                    let right = audioData.getChannelData(1);
+                        let left = data.buffer.getChannelData(0);
+                        let right = data.buffer.getChannelData(1);
 
-                    audio = new Float32Array(left.length);
-                    for (let i = 0; i < audioData.length; ++i) {
-                        audio[i] = SCALING_FACTOR * (left[i] + right[i]) / 2;
+                        audio = new Float32Array(left.length);
+                        for (let i = 0; i < data.buffer.length; ++i) {
+                            audio[i] =
+                                (SCALING_FACTOR * (left[i] + right[i])) / 2;
+                        }
+                    } else {
+                        // If the audio is not stereo, we can just use the first channel:
+                        audio = data.buffer.getChannelData(0);
                     }
-                } else {
-                    // If the audio is not stereo, we can just use the first channel:
-                    audio = audioData.getChannelData(0);
-                }
 
-                webWorker.postMessage({
-                    audio,
-                    model,
-                    multilingual,
-                    quantized,
-                    subtask: multilingual ? subtask : null,
-                    language:
-                        multilingual && language !== "auto" ? language : null,
+                    await webWorker.postMessage({
+                        audio,
+                        model,
+                        multilingual,
+                        quantized,
+                        subtask: multilingual ? subtask : null,
+                        language:
+                            multilingual && language !== "auto"
+                                ? language
+                                : null,
+                        fileName: data.fileName,
+                    });
                 });
             }
         },

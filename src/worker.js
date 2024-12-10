@@ -45,6 +45,7 @@ self.addEventListener("message", async (event) => {
         message.quantized,
         message.subtask,
         message.language,
+        message.fileName,
     );
     if (transcript === null) return;
 
@@ -53,6 +54,7 @@ self.addEventListener("message", async (event) => {
         status: "complete",
         task: "automatic-speech-recognition",
         data: transcript,
+        fileName: message.fileName,
     });
 });
 
@@ -69,13 +71,13 @@ const transcribe = async (
     quantized,
     subtask,
     language,
+    fileName,
 ) => {
-
     const isDistilWhisper = model.startsWith("distil-whisper/");
 
     let modelName = model;
     if (!isDistilWhisper && !multilingual) {
-        modelName += ".en"
+        modelName += ".en";
     }
 
     const p = AutomaticSpeechRecognitionPipelineFactory;
@@ -145,6 +147,7 @@ const transcribe = async (
             status: "update",
             task: "automatic-speech-recognition",
             data: data,
+            fileName,
         });
     }
 
@@ -174,6 +177,7 @@ const transcribe = async (
             status: "error",
             task: "automatic-speech-recognition",
             data: error,
+            fileName,
         });
         return null;
     });

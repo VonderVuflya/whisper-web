@@ -5,7 +5,7 @@ import { UrlInput } from "./modal/UrlInput";
 import AudioPlayer from "./AudioPlayer";
 import { TranscribeButton } from "./TranscribeButton";
 import Constants from "../utils/Constants";
-import { Transcriber } from "../hooks/useTranscriber";
+import { AudioData, AudioSource, Transcriber } from "../hooks/useTranscriber";
 import Progress from "./Progress";
 import AudioRecorder from "./AudioRecorder";
 import {
@@ -17,6 +17,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "./ui/dialog";
+import Ellipsis from "./Ellipsis";
 
 function titleCase(str: string) {
     str = str.toLowerCase();
@@ -132,24 +133,11 @@ const LANGUAGES = {
     su: "sundanese",
 };
 
-export enum AudioSource {
-    URL = "URL",
-    FILE = "FILE",
-    RECORDING = "RECORDING",
-}
-
 export function AudioManager(props: { transcriber: Transcriber }) {
     const [progress, setProgress] = useState<number | undefined>(undefined);
-    const [audioData, setAudioData] = useState<
-        | {
-              buffer: AudioBuffer;
-              url: string;
-              source: AudioSource;
-              mimeType: string;
-              fileName?: string;
-          }
-        | undefined
-    >(undefined);
+    const [audioData, setAudioData] = useState<AudioData | undefined>(
+        undefined,
+    );
     const [audioDownloadUrl, setAudioDownloadUrl] = useState<
         string | undefined
     >(undefined);
@@ -157,7 +145,7 @@ export function AudioManager(props: { transcriber: Transcriber }) {
     const isAudioLoading = progress !== undefined;
 
     const resetAudio = () => {
-        setAudioData(undefined);
+        setAudioData([]);
         setAudioDownloadUrl(undefined);
     };
 
@@ -172,12 +160,15 @@ export function AudioManager(props: { transcriber: Transcriber }) {
             new Blob([data], { type: "audio/*" }),
         );
         const decoded = await audioCTX.decodeAudioData(data);
-        setAudioData({
-            buffer: decoded,
-            url: blobUrl,
-            source: AudioSource.URL,
-            mimeType: mimeType,
-        });
+        setAudioData([
+            {
+                buffer: decoded,
+                url: blobUrl,
+                source: AudioSource.URL,
+                mimeType: mimeType,
+                fileName: "", // TODO: generate fileName
+            },
+        ]);
     };
 
     const setAudioFromRecording = async (data: Blob) => {
@@ -195,12 +186,15 @@ export function AudioManager(props: { transcriber: Transcriber }) {
             const arrayBuffer = fileReader.result as ArrayBuffer;
             const decoded = await audioCTX.decodeAudioData(arrayBuffer);
             setProgress(undefined);
-            setAudioData({
-                buffer: decoded,
-                url: blobUrl,
-                source: AudioSource.RECORDING,
-                mimeType: data.type,
-            });
+            setAudioData([
+                {
+                    buffer: decoded,
+                    url: blobUrl,
+                    source: AudioSource.RECORDING,
+                    mimeType: data.type,
+                    fileName: "", // TODO: generate fileName
+                },
+            ]);
         };
         fileReader.readAsArrayBuffer(data);
     };
@@ -210,7 +204,7 @@ export function AudioManager(props: { transcriber: Transcriber }) {
     ) => {
         if (audioDownloadUrl) {
             try {
-                setAudioData(undefined);
+                setAudioData([]);
                 setProgress(0);
                 const { data, headers } = (await axios.get(audioDownloadUrl, {
                     signal: requestAbortController.signal,
@@ -270,13 +264,18 @@ export function AudioManager(props: { transcriber: Transcriber }) {
                             fileName,
                         ) => {
                             props.transcriber.onInputChange();
-                            setAudioData({
-                                buffer: decoded,
-                                url: blobUrl,
-                                source: AudioSource.FILE,
-                                mimeType: mimeType,
-                                fileName: fileName,
-                            });
+                            setAudioData((prevState) => [
+                                ...(prevState ?? []),
+                                ...[
+                                    {
+                                        buffer: decoded,
+                                        url: blobUrl,
+                                        source: AudioSource.FILE,
+                                        mimeType: mimeType,
+                                        fileName: fileName,
+                                    },
+                                ],
+                            ]);
                         }}
                     />
                     {navigator.mediaDevices && (
@@ -295,22 +294,43 @@ export function AudioManager(props: { transcriber: Transcriber }) {
                 </div>
                 {
                     <AudioDataBar
-                        progress={isAudioLoading ? progress : +!!audioData}
+                        progress={isAudioLoading ? progress : +!!audioData?.[0]}
                     />
                 }
             </div>
-            {audioData && (
+            {audioData?.length && (
                 <>
-                    <AudioPlayer
-                        audioUrl={audioData.url}
-                        mimeType={audioData.mimeType}
-                        fileName={audioData.fileName}
-                    />
+                    {audioData?.length > 1 ? (
+                        <div className='flex gap-3 p-4 max-w-[600px] overflow-x-auto'>
+                            {audioData.map((file) => (
+                                <div className='w-[80px] h-[80px] relative p-2 rounded-lg bg-background shadow-lg shadow-black/5 ring-1 ring-slate-700/10 dark:bg-slate-800 dark:ring-slate-600/10 dark:shadow-slate-900/5'>
+                                    <Ellipsis
+                                        cutFileExtension
+                                        displayTooltip
+                                        isMiddleEllipsis
+                                        text={file.fileName}
+                                        className='max-w-[60px] text-slate-600 dark:text-muted-foreground'
+                                        charsToDisplayEnd={4}
+                                    />
+
+                                    <p className='absolute bottom-2 right-2 text-slate-600 dark:text-muted-foreground'>
+                                        .{file.fileName.split(".")[1]}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <AudioPlayer
+                            audioUrl={audioData[0].url}
+                            mimeType={audioData[0].mimeType}
+                            fileName={audioData[0].fileName}
+                        />
+                    )}
 
                     <div className='relative w-full flex justify-center items-center'>
                         <TranscribeButton
                             onClick={() => {
-                                props.transcriber.start(audioData.buffer);
+                                props.transcriber.start(audioData);
                             }}
                             isModelLoading={props.transcriber.isModelLoading}
                             // isAudioLoading ||
@@ -553,30 +573,38 @@ function FileTile(props: {
     // Create hidden input element
     let elem = document.createElement("input");
     elem.type = "file";
+    elem.multiple = true;
+    elem.accept = "audio/*";
     elem.oninput = (event) => {
         // Make sure we have files to use
         let files = (event.target as HTMLInputElement).files;
         if (!files) return;
 
-        // Create a blob that we can use as an src for our audio element
-        const urlObj = URL.createObjectURL(files[0]);
-        const mimeType = files[0].type;
-        const fileName = files[0].name;
+        for (let i = 0; i < files.length; i++) {
+            let file = files.item(i);
 
-        const reader = new FileReader();
-        reader.addEventListener("load", async (e) => {
-            const arrayBuffer = e.target?.result as ArrayBuffer; // Get the ArrayBuffer
-            if (!arrayBuffer) return;
+            if (file !== null) {
+                // Create a blob that we can use as an src for our audio element
+                const urlObj = URL.createObjectURL(file);
+                const mimeType = file.type;
+                const fileName = file.name;
 
-            const audioCTX = new AudioContext({
-                sampleRate: Constants.SAMPLING_RATE,
-            });
+                const reader = new FileReader();
+                reader.addEventListener("load", async (e) => {
+                    const arrayBuffer = e.target?.result as ArrayBuffer; // Get the ArrayBuffer
+                    if (!arrayBuffer) return;
 
-            const decoded = await audioCTX.decodeAudioData(arrayBuffer);
+                    const audioCTX = new AudioContext({
+                        sampleRate: Constants.SAMPLING_RATE,
+                    });
 
-            props.onFileUpdate(decoded, urlObj, mimeType, fileName);
-        });
-        reader.readAsArrayBuffer(files[0]);
+                    const decoded = await audioCTX.decodeAudioData(arrayBuffer);
+
+                    props.onFileUpdate(decoded, urlObj, mimeType, fileName);
+                });
+                reader.readAsArrayBuffer(file);
+            }
+        }
 
         // Reset files
         elem.value = "";
